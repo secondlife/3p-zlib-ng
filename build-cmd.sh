@@ -44,7 +44,16 @@ pushd "$ZLIB_SOURCE_DIR"
             mkdir -p "WIN"
             pushd "WIN"
 
-            cmake -G "$AUTOBUILD_WIN_CMAKE_GEN" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON
+            case "$AUTOBUILD_ADDRSIZE" in
+                32)
+                    cmake_arch="Win32"
+                    ;;
+                64)
+                    cmake_arch="x64"
+                    ;;
+            esac
+
+            cmake -G "$AUTOBUILD_WIN_CMAKE_GEN" -A "$cmake_arch" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON
 
             #build_sln "zlib.sln" "Release|$AUTOBUILD_WIN_VSPLATFORM" "zlib"
             cmake --build . --config Release

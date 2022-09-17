@@ -1,6 +1,4 @@
 stage/
 zlib-ng/WIN
-
 *.exe
-
-
+.vscode
