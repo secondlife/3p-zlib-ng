@@ -84,9 +84,14 @@ pushd "$ZLIB_SOURCE_DIR"
             # We copy libz.a for package, not dylibs
             install_name="@executable_path/../Resources/libz.1.dylib"
 
-            cc_opts="${TARGET_OPTS:--arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE}"
-            ld_opts="-Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
+            # todo - build support into autobuild for universal AUTOBUILD_CONFIGURE_ARCH
+            ARCH_ARGS="-arch x86_64 -arch arm64"
+            cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
+            ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
             export CC=clang
+
+            logical_cpus=$(sysctl hw.logicalcpu | cut -d ':' -d ' ' -f 2)
+            export MAKEFLAGS="-j${logical_cpus:-2}"
 
             # release
             CFLAGS="$cc_opts" \
