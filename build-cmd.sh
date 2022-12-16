@@ -90,8 +90,7 @@ pushd "$ZLIB_SOURCE_DIR"
             ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
             export CC=clang
 
-            logical_cpus=$(sysctl hw.logicalcpu | cut -d ':' -d ' ' -f 2)
-            export MAKEFLAGS="-j${logical_cpus:-2}"
+            export MAKEFLAGS="-j${AUTOBUILD_CPU_COUNT:-2}"
 
             # release
             CFLAGS="$cc_opts" \
