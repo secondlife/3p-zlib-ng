@@ -110,8 +110,8 @@ pushd "$ZLIB_SOURCE_DIR"
                 make
                 make install
 
-                # conditionally run unit tests
-                if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                # conditionally run unit tests only on native host architecture
+                if [ "${DISABLE_UNIT_TESTS:-0}" = "0" -a "$arch" = "$(uname -m)" ]; then
                     # Build a Resources directory as a peer to the test executable directory
                     # and fill it with symlinks to the dylibs.  This replicates the target
                     # environment of the viewer.
