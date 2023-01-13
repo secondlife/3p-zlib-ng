@@ -95,7 +95,6 @@ pushd "$ZLIB_SOURCE_DIR"
 
             export MAKEFLAGS="-j${AUTOBUILD_CPU_COUNT:-2}"
 
-            # todo - build support into autobuild for universal AUTOBUILD_CONFIGURE_ARCH
             for arch in x86_64 arm64 ; do
                 ARCH_ARGS="-arch $arch"
                 cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"

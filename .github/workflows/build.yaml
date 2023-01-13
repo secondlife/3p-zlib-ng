@@ -1,12 +1,10 @@
 name: Build
 on: [push]
-env:
-  DEVELOPER_DIR: /Applications/Xcode_14.1.app/Contents/Developer
 jobs:
   build:
     strategy:
       matrix:
-        os: [windows-2022, macos-12, ubuntu-22.04]
+        os: [windows-2022, macos-11, ubuntu-22.04]
         addrsize: ["64"]
         include:
           - os: windows-2022
