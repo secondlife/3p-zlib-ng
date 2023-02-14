@@ -93,32 +93,40 @@ pushd "$ZLIB_SOURCE_DIR"
             # We copy libz.a for package, not dylibs
             install_name="@executable_path/../Resources/libz.1.dylib"
 
-            cc_opts="${TARGET_OPTS:--arch $AUTOBUILD_CONFIGURE_ARCH $LL_BUILD_RELEASE}"
-            ld_opts="-Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
-            export CC=clang
+            export MAKEFLAGS="-j${AUTOBUILD_CPU_COUNT:-2}"
 
-            # release
-            CFLAGS="$cc_opts" \
-            LDFLAGS="$ld_opts" \
-                ./configure $cfg_sw --prefix="$stage" --includedir="$stage/include/zlib-ng" --libdir="$stage/lib/release" --zlib-compat
-            make
-            make install
+            for arch in x86_64 arm64 ; do
+                ARCH_ARGS="-arch $arch"
+                cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
+                ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
+                export CC=clang
 
-            # conditionally run unit tests
-            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                # Build a Resources directory as a peer to the test executable directory
-                # and fill it with symlinks to the dylibs.  This replicates the target
-                # environment of the viewer.
-                mkdir -p ../Resources
-                ln -sf "${stage}"/lib/release/*.dylib ../Resources
+                # release
+                CFLAGS="$cc_opts" \
+                LDFLAGS="$ld_opts" \
+                ARCH="$arch" \
+                    ./configure $cfg_sw --prefix="$stage" --includedir="$stage/include/zlib-ng" --libdir="$stage/lib/release/$arch" --zlib-compat --static
+                make
+                make install
 
-                make test
+                # conditionally run unit tests only on native host architecture
+                if [ "${DISABLE_UNIT_TESTS:-0}" = "0" -a "$arch" = "$(uname -m)" ]; then
+                    # Build a Resources directory as a peer to the test executable directory
+                    # and fill it with symlinks to the dylibs.  This replicates the target
+                    # environment of the viewer.
+                    mkdir -p ../Resources
+                    ln -sf "${stage}"/lib/release/$arch/*.dylib ../Resources
 
-                # And wipe it
-                rm -rf ../Resources
-            fi
+                    make test
 
-            make distclean
+                    # And wipe it
+                    rm -rf ../Resources
+                fi
+
+                make distclean
+            done
+
+            lipo -create -output "$stage/lib/release/libz.a" "$stage/lib/release/x86_64/libz.a" "$stage/lib/release/arm64/libz.a" 
         ;;            
 
         # -------------------------- linux, linux64 --------------------------

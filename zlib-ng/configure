@@ -29,7 +29,9 @@ if [ -n "${CHOST}" ]; then
     CROSS_PREFIX="${CHOST}-"
     ARCH="$(echo "${NORM_CHOST}" | sed -e 's/-.*//')"
 else
-    ARCH="`uname -m`"
+    if [ -z "$ARCH" ] ; then
+        ARCH="`uname -m`"
+    fi
 fi
 
 case "${ARCH}" in
