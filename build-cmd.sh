@@ -27,9 +27,16 @@ source_environment_tempfile="$stage/source_environment.sh"
 "$autobuild" source_environment > "$source_environment_tempfile"
 . "$source_environment_tempfile"
 
-# Note that file has ZLIBNG_VERSION and ZLIB_VERSION, first one is the correct version, second one is used for zlib.version.dylib
+# Note that zlib.h contains both ZLIBNG_VERSION and ZLIB_VERSION: the first
+# one is the zlib-ng version, the second one is the underlying zlib version.
+# The distinction is important; as of 2023-03-08, ZLIBNG_VERSION is 2.0.5
+# whereas ZLIB_VERSION is 1.2.11.zlib-ng. Prefer ZLIB_VERSION because
+# 3p-curl/build-cmd.sh tries to verify that curl.exe was built with the
+# correct versions of constituent packages, and curl.exe reports ZLIB_VERSION
+# rather than ZLIBNG_VERSION. When this package self-reports as version 2.0.5
+# but curl.exe says it contains 1.2.11.zlib-ng, 3p-curl/build-cmd.sh fails.
 VERSION_HEADER_FILE="$ZLIB_SOURCE_DIR/zlib.h"
-version=$(sed -n -E 's/#define ZLIBNG_VERSION "([0-9.]+)"/\1/p' "${VERSION_HEADER_FILE}")
+version=$(sed -n -E 's/#define ZLIB_VERSION "([0-9.]+)"/\1/p' "${VERSION_HEADER_FILE}")
 build=${AUTOBUILD_BUILD_ID:=0}
 echo "${version}.${build}" > "${stage}/VERSION.txt"
 
