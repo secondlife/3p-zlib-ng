@@ -27,6 +27,9 @@ source_environment_tempfile="$stage/source_environment.sh"
 "$autobuild" source_environment > "$source_environment_tempfile"
 . "$source_environment_tempfile"
 
+# remove_cxxstd
+source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
+
 # Note that zlib.h contains both ZLIBNG_VERSION and ZLIB_VERSION: the first
 # one is the zlib-ng version, the second one is the underlying zlib version.
 # The distinction is important; as of 2023-03-08, ZLIBNG_VERSION is 2.0.5
@@ -105,6 +108,7 @@ pushd "$ZLIB_SOURCE_DIR"
             for arch in x86_64 arm64 ; do
                 ARCH_ARGS="-arch $arch"
                 cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
+                cc_opts="$(remove_cxxstd $cc_opts)"
                 ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
                 export CC=clang
 
@@ -173,7 +177,7 @@ pushd "$ZLIB_SOURCE_DIR"
             fi
 
             # Release
-            CFLAGS="$opts" CXXFLAGS="$opts" \
+            CFLAGS="$(remove_cxxstd $opts)" CXXFLAGS="$opts" \
                 ./configure --prefix="$stage" --includedir="$stage/include/zlib-ng" --libdir="$stage/lib/release" --zlib-compat
             make
             make install
