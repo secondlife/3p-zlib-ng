@@ -2,12 +2,7 @@
 
 cd "$(dirname "$0")"
 
-# turn on verbose debugging output for logs.
-exec 4>&1; export BASH_XTRACEFD=4; set -x
-# make errors fatal
-set -e
-# bleat on references to undefined shell variables
-set -u
+set -eux
 
 ZLIB_SOURCE_DIR="zlib-ng"
 
@@ -29,19 +24,6 @@ source_environment_tempfile="$stage/source_environment.sh"
 
 # remove_cxxstd
 source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
-
-# Note that zlib.h contains both ZLIBNG_VERSION and ZLIB_VERSION: the first
-# one is the zlib-ng version, the second one is the underlying zlib version.
-# The distinction is important; as of 2023-03-08, ZLIBNG_VERSION is 2.0.5
-# whereas ZLIB_VERSION is 1.2.11.zlib-ng. Prefer ZLIB_VERSION because
-# 3p-curl/build-cmd.sh tries to verify that curl.exe was built with the
-# correct versions of constituent packages, and curl.exe reports ZLIB_VERSION
-# rather than ZLIBNG_VERSION. When this package self-reports as version 2.0.5
-# but curl.exe says it contains 1.2.11.zlib-ng, 3p-curl/build-cmd.sh fails.
-VERSION_HEADER_FILE="$ZLIB_SOURCE_DIR/zlib.h"
-version=$(sed -n -E 's/#define ZLIB_VERSION "(.+)"/\1/p' "${VERSION_HEADER_FILE}")
-build=${AUTOBUILD_BUILD_ID:=0}
-echo "${version}.${build}" > "${stage}/VERSION.txt"
 
 pushd "$ZLIB_SOURCE_DIR"
     case "$AUTOBUILD_PLATFORM" in
@@ -197,4 +179,3 @@ pushd "$ZLIB_SOURCE_DIR"
 popd
 
 mkdir -p "$stage"/docs/zlib-ng/
-cp -a README.Linden "$stage"/docs/zlib-ng/
