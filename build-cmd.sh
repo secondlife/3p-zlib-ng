@@ -60,6 +60,8 @@ pushd "$ZLIB_SOURCE_DIR"
 
             mkdir -p "$stage/include/zlib-ng"
             cp -a zconf.h "$stage/include/zlib-ng"
+            cp -a zlib.h "$stage/include/zlib-ng"
+            cp -a zlib_name_mangling.h "$stage/include/zlib-ng"
 
             # zlib-ng includes minigzip, but only in executable form
 
