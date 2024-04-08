@@ -14,6 +14,7 @@ jobs:
       - uses: secondlife/action-autobuild@signal/mysys2
         with:
           addrsize: ${{ matrix.addrsize }}
+          cygwin: true
   release:
     needs: build
     runs-on: [ubuntu-latest]
