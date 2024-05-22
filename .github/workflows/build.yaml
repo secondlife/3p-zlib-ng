@@ -9,8 +9,13 @@ jobs:
         include:
           - os: windows-2022
             addrsize: "32"
+          - os: ubuntu-22.04
+            addrsize: "32"
     runs-on: ${{ matrix.os }}
     steps:
+      - name: "Setup 32bit multilib"
+        if: runner.os == 'Linux' && matrix.addrsize == '32'
+        run: sudo apt-get install gcc-multilib g++-multilib
       - uses: secondlife/action-autobuild@v4
         with:
           addrsize: ${{ matrix.addrsize }}
