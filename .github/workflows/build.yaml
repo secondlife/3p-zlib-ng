@@ -17,13 +17,13 @@ jobs:
             addrsize: "32"
     runs-on: ${{ matrix.os }}
     steps:
-        run: sudo apt-get install gcc-multilib g++-multilib
       - name: Setup Homebrew Packages
         if: ${{ runner.os == 'macOS' }}
         shell: bash
         run: brew install ninja
       - name: Setup 32-bit Apt Packages
         if: runner.os == 'Linux' && matrix.addrsize == '32'
+        run: sudo apt-get install gcc-multilib g++-multilib
       - name: Setup Apt Packages
         if: ${{ runner.os == 'Linux' }}
         shell: bash
