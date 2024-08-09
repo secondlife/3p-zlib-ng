@@ -2,12 +2,7 @@
 
 cd "$(dirname "$0")"
 
-# turn on verbose debugging output for logs.
-exec 4>&1; export BASH_XTRACEFD=4; set -x
-# make errors fatal
-set -e
-# bleat on references to undefined shell variables
-set -u
+set -eux
 
 ZLIB_SOURCE_DIR="zlib-ng"
 
@@ -30,19 +25,6 @@ source_environment_tempfile="$stage/source_environment.sh"
 # remove_cxxstd
 source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
 
-# Note that zlib.h contains both ZLIBNG_VERSION and ZLIB_VERSION: the first
-# one is the zlib-ng version, the second one is the underlying zlib version.
-# The distinction is important; as of 2023-03-08, ZLIBNG_VERSION is 2.0.5
-# whereas ZLIB_VERSION is 1.2.11.zlib-ng. Prefer ZLIB_VERSION because
-# 3p-curl/build-cmd.sh tries to verify that curl.exe was built with the
-# correct versions of constituent packages, and curl.exe reports ZLIB_VERSION
-# rather than ZLIBNG_VERSION. When this package self-reports as version 2.0.5
-# but curl.exe says it contains 1.2.11.zlib-ng, 3p-curl/build-cmd.sh fails.
-VERSION_HEADER_FILE="$ZLIB_SOURCE_DIR/zlib.h"
-version=$(sed -n -E 's/#define ZLIB_VERSION "(.+)"/\1/p' "${VERSION_HEADER_FILE}")
-build=${AUTOBUILD_BUILD_ID:=0}
-echo "${version}.${build}" > "${stage}/VERSION.txt"
-
 pushd "$ZLIB_SOURCE_DIR"
     case "$AUTOBUILD_PLATFORM" in
 
@@ -54,87 +36,66 @@ pushd "$ZLIB_SOURCE_DIR"
             mkdir -p "WIN"
             pushd "WIN"
 
-            case "$AUTOBUILD_ADDRSIZE" in
-                32)
-                    cmake_arch="Win32"
-                    ;;
-                64)
-                    cmake_arch="x64"
-                    ;;
-            esac
+            opts="$(replace_switch /Zi /Z7 $LL_BUILD_RELEASE)"
+            plainopts="$(remove_switch /GR $(remove_cxxstd $opts))"
 
-            cmake -G "$AUTOBUILD_WIN_CMAKE_GEN" -A "$cmake_arch" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON
+            cmake -G "Ninja Multi-Config" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON \
+                    -DCMAKE_C_FLAGS="$plainopts" \
+                    -DCMAKE_CXX_FLAGS="$opts" \
+                    -DCMAKE_INSTALL_PREFIX="$(cygpath -m $stage)" \
+                    -DCMAKE_INSTALL_LIBDIR="$(cygpath -m "$stage/lib/release")" \
+                    -DCMAKE_INSTALL_INCLUDEDIR="$(cygpath -m "$stage/include/zlib-ng")"
 
-            #build_sln "zlib.sln" "Release|$AUTOBUILD_WIN_VSPLATFORM" "zlib"
             cmake --build . --config Release
+            cmake --install . --config Release
 
             # conditionally run unit tests
             if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
                 ctest -C Release
             fi
 
-            mkdir -p "$stage/lib/release"
-            cp -a "Release/zlibstatic.lib" "$stage/lib/release/zlib.lib"
-
-            mkdir -p "$stage/include/zlib-ng"
-            cp -a zconf.h "$stage/include/zlib-ng"
-
-            # zlib-ng includes minigzip, but only in executable form
+            mv "$stage/lib/release/zlibstatic.lib" "$stage/lib/release/zlib.lib"
 
             # WIN
             popd
-
-            cp -a zlib.h "$stage/include/zlib-ng"
         ;;
 
         # ------------------------- darwin, darwin64 -------------------------
         darwin*)
-
-            case "$AUTOBUILD_ADDRSIZE" in
-                32)
-                    cfg_sw=
-                    ;;
-                64)
-                    cfg_sw="--64"
-                    ;;
-            esac
-
             # Install name for dylibs
             # We copy libz.a for package, not dylibs
             install_name="@executable_path/../Resources/libz.1.dylib"
 
-            export MAKEFLAGS="-j${AUTOBUILD_CPU_COUNT:-2}"
+            export MACOSX_DEPLOYMENT_TARGET="$LL_BUILD_DARWIN_DEPLOY_TARGET"
 
             for arch in x86_64 arm64 ; do
                 ARCH_ARGS="-arch $arch"
                 cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
                 cc_opts="$(remove_cxxstd $cc_opts)"
                 ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
-                export CC=clang
 
-                # release
-                CFLAGS="$cc_opts" \
-                LDFLAGS="$ld_opts" \
-                ARCH="$arch" \
-                    ./configure $cfg_sw --prefix="$stage" --includedir="$stage/include/zlib-ng" --libdir="$stage/lib/release/$arch" --zlib-compat --static
-                make
-                make install
+                mkdir -p "build_$arch"
+                pushd "build_$arch"
+                    CFLAGS="$cc_opts" \
+                    LDFLAGS="$ld_opts" \
+                    cmake .. -G "Ninja Multi-Config" -DBUILD_SHARED_LIBS:BOOL=OFF -DZLIB_COMPAT:BOOL=ON \
+                        -DCMAKE_BUILD_TYPE="Release" \
+                        -DCMAKE_C_FLAGS="$cc_opts" \
+                        -DCMAKE_CXX_FLAGS="$cc_opts" \
+                        -DCMAKE_INSTALL_PREFIX="$stage" \
+                        -DCMAKE_INSTALL_LIBDIR="$stage/lib/release/$arch" \
+                        -DCMAKE_INSTALL_INCLUDEDIR="$stage/include/zlib-ng" \
+                        -DCMAKE_OSX_ARCHITECTURES="$arch" \
+                        -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}
 
-                # conditionally run unit tests only on native host architecture
-                if [ "${DISABLE_UNIT_TESTS:-0}" = "0" -a "$arch" = "$(uname -m)" ]; then
-                    # Build a Resources directory as a peer to the test executable directory
-                    # and fill it with symlinks to the dylibs.  This replicates the target
-                    # environment of the viewer.
-                    mkdir -p ../Resources
-                    ln -sf "${stage}"/lib/release/$arch/*.dylib ../Resources
+                    cmake --build . --config Release
+                    cmake --install . --config Release
 
-                    make test
-
-                    # And wipe it
-                    rm -rf ../Resources
-                fi
-
-                make distclean
+                    # conditionally run unit tests
+                    if [ "${DISABLE_UNIT_TESTS:-0}" = "0" -a "$arch" = "$(uname -m)" ]; then
+                        ctest -C Release
+                    fi
+                popd
             done
 
             lipo -create -output "$stage/lib/release/libz.a" "$stage/lib/release/x86_64/libz.a" "$stage/lib/release/arm64/libz.a" 
@@ -142,53 +103,28 @@ pushd "$ZLIB_SOURCE_DIR"
 
         # -------------------------- linux, linux64 --------------------------
         linux*)
-
-            # Linux build environment at Linden comes pre-polluted with stuff that can
-            # seriously damage 3rd-party builds.  Environmental garbage you can expect
-            # includes:
-            #
-            #    DISTCC_POTENTIAL_HOSTS     arch           root        CXXFLAGS
-            #    DISTCC_LOCATION            top            branch      CC
-            #    DISTCC_HOSTS               build_name     suffix      CXX
-            #    LSDISTCC_ARGS              repo           prefix      CFLAGS
-            #    cxx_version                AUTOBUILD      SIGN        CPPFLAGS
-            #
-            # So, clear out bits that shouldn't affect our configure-directed build
-            # but which do nonetheless.
-            #
-            unset DISTCC_HOSTS CC CXX CFLAGS CPPFLAGS CXXFLAGS
-
-            # Prefer gcc-4.6 if available.
-            if [[ -x /usr/bin/gcc-4.6 && -x /usr/bin/g++-4.6 ]]; then
-                export CC=/usr/bin/gcc-4.6
-                export CXX=/usr/bin/g++-4.6
-            fi
-
             # Default target per autobuild build --address-size
             opts="${TARGET_OPTS:--m$AUTOBUILD_ADDRSIZE $LL_BUILD_RELEASE}"
 
-            # Handle any deliberate platform targeting
-            if [ ! "${TARGET_CPPFLAGS:-}" ]; then
-                # Remove sysroot contamination from build environment
-                unset CPPFLAGS
-            else
-                # Incorporate special pre-processing flags
-                export CPPFLAGS="$TARGET_CPPFLAGS"
-            fi
-
             # Release
-            CFLAGS="$(remove_cxxstd $opts)" CXXFLAGS="$opts" \
-                ./configure --prefix="$stage" --includedir="$stage/include/zlib-ng" --libdir="$stage/lib/release" --zlib-compat
-            make
-            make install
+            mkdir -p "build"
+            pushd "build"
+                cmake .. -GNinja -DBUILD_SHARED_LIBS:BOOL=OFF -DZLIB_COMPAT:BOOL=ON \
+                    -DCMAKE_BUILD_TYPE="Release" \
+                    -DCMAKE_C_FLAGS="$(remove_cxxstd $opts)" \
+                    -DCMAKE_CXX_FLAGS="$opts" \
+                    -DCMAKE_INSTALL_PREFIX="$stage" \
+                    -DCMAKE_INSTALL_LIBDIR="$stage/lib/release" \
+                    -DCMAKE_INSTALL_INCLUDEDIR="$stage/include/zlib-ng"
 
-            # conditionally run unit tests
-            if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                make test
-            fi
+                cmake --build . --config Release
+                cmake --install . --config Release
 
-            # clean the build artifacts
-            make distclean
+                # conditionally run unit tests
+                if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                    ctest -C Release
+                fi
+            popd
         ;;
     esac
 
@@ -197,4 +133,3 @@ pushd "$ZLIB_SOURCE_DIR"
 popd
 
 mkdir -p "$stage"/docs/zlib-ng/
-cp -a README.Linden "$stage"/docs/zlib-ng/
