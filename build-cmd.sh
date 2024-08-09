@@ -36,7 +36,12 @@ pushd "$ZLIB_SOURCE_DIR"
             mkdir -p "WIN"
             pushd "WIN"
 
+            opts="$(replace_switch /Zi /Z7 $LL_BUILD_RELEASE)"
+            plainopts="$(remove_switch /GR $(remove_cxxstd $opts))"
+
             cmake -G "Ninja Multi-Config" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON \
+                    -DCMAKE_C_FLAGS="$plainopts" \
+                    -DCMAKE_CXX_FLAGS="$opts" \
                     -DCMAKE_INSTALL_PREFIX="$(cygpath -m $stage)" \
                     -DCMAKE_INSTALL_LIBDIR="$(cygpath -m "$stage/lib/release")" \
                     -DCMAKE_INSTALL_INCLUDEDIR="$(cygpath -m "$stage/include/zlib-ng")"
