@@ -22,8 +22,10 @@ source_environment_tempfile="$stage/source_environment.sh"
 "$autobuild" source_environment > "$source_environment_tempfile"
 . "$source_environment_tempfile"
 
-# remove_cxxstd
+# remove_cxxstd apply_patch
 source "$(dirname "$AUTOBUILD_VARIABLES_FILE")/functions"
+
+apply_patch "$top/patches/fix-macos-arm64-and-win-build.patch" "$ZLIB_SOURCE_DIR"
 
 pushd "$ZLIB_SOURCE_DIR"
     case "$AUTOBUILD_PLATFORM" in
@@ -41,17 +43,17 @@ pushd "$ZLIB_SOURCE_DIR"
 
             cmake -G "Ninja Multi-Config" .. -DBUILD_SHARED_LIBS=OFF -DZLIB_COMPAT:BOOL=ON \
                     -DCMAKE_C_FLAGS="$plainopts" \
-                    -DCMAKE_CXX_FLAGS="$opts" \
+                    -DCMAKE_CXX_FLAGS="$opts /EHsc" \
                     -DCMAKE_INSTALL_PREFIX="$(cygpath -m $stage)" \
                     -DCMAKE_INSTALL_LIBDIR="$(cygpath -m "$stage/lib/release")" \
                     -DCMAKE_INSTALL_INCLUDEDIR="$(cygpath -m "$stage/include/zlib-ng")"
 
-            cmake --build . --config Release
+            cmake --build . --config Release --parallel $AUTOBUILD_CPU_COUNT
             cmake --install . --config Release
 
             # conditionally run unit tests
             if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                ctest -C Release
+                ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
             fi
 
             mv "$stage/lib/release/zlibstatic.lib" "$stage/lib/release/zlib.lib"
@@ -62,17 +64,13 @@ pushd "$ZLIB_SOURCE_DIR"
 
         # ------------------------- darwin, darwin64 -------------------------
         darwin*)
-            # Install name for dylibs
-            # We copy libz.a for package, not dylibs
-            install_name="@executable_path/../Resources/libz.1.dylib"
-
             export MACOSX_DEPLOYMENT_TARGET="$LL_BUILD_DARWIN_DEPLOY_TARGET"
 
             for arch in x86_64 arm64 ; do
                 ARCH_ARGS="-arch $arch"
                 cc_opts="${TARGET_OPTS:-$ARCH_ARGS $LL_BUILD_RELEASE}"
                 cc_opts="$(remove_cxxstd $cc_opts)"
-                ld_opts="$ARCH_ARGS -Wl,-install_name,\"${install_name}\" -Wl,-headerpad_max_install_names"
+                ld_opts="$ARCH_ARGS"
 
                 mkdir -p "build_$arch"
                 pushd "build_$arch"
@@ -88,18 +86,18 @@ pushd "$ZLIB_SOURCE_DIR"
                         -DCMAKE_OSX_ARCHITECTURES="$arch" \
                         -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}
 
-                    cmake --build . --config Release
+                    cmake --build . --config Release --parallel $AUTOBUILD_CPU_COUNT
                     cmake --install . --config Release
 
                     # conditionally run unit tests
-                    if [ "${DISABLE_UNIT_TESTS:-0}" = "0" -a "$arch" = "$(uname -m)" ]; then
-                        ctest -C Release
+                    if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
+                        ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
                     fi
                 popd
             done
 
-            lipo -create -output "$stage/lib/release/libz.a" "$stage/lib/release/x86_64/libz.a" "$stage/lib/release/arm64/libz.a" 
-        ;;            
+            lipo -create -output "$stage/lib/release/libz.a" "$stage/lib/release/x86_64/libz.a" "$stage/lib/release/arm64/libz.a"
+        ;;
 
         # -------------------------- linux, linux64 --------------------------
         linux*)
@@ -122,7 +120,7 @@ pushd "$ZLIB_SOURCE_DIR"
 
                 # conditionally run unit tests
                 if [ "${DISABLE_UNIT_TESTS:-0}" = "0" ]; then
-                    ctest -C Release
+                    ctest -C Release --parallel $AUTOBUILD_CPU_COUNT
                 fi
             popd
         ;;
